@@ -178,12 +178,31 @@ at least one entity.
 ```python
 context_block = memory.build_context(
     user_id="user_1",
+    session_id="session_1",
     query="Which project uses XGBoost?",
 )
 ```
 
 The context block includes structured memories and matching raw recall messages, ready to
 inject into an agent prompt.
+
+`build_context()` also supports session state injection and character budgets:
+
+```python
+from agent_memory import ContextBudget
+
+context_block = memory.build_context(
+    user_id="user_1",
+    session_id="session_1",
+    query="What should the agent remember?",
+    budget=ContextBudget(
+        max_context_chars=6000,
+        session_chars=800,
+        memory_chars=3200,
+        recall_chars=1600,
+    ),
+)
+```
 
 ## ChromaDB + LLM Mode
 
@@ -207,6 +226,20 @@ memory = MemoryLayer.with_openai(
 `with_openai()` enables LLM-backed scope resolution, LLM-backed memory extraction,
 LLM-backed conflict decisions, and Chroma retrieval. Structured memories are still stored
 in SQLite as the source of truth; Chroma stores the semantic retrieval index.
+
+## Memory Provenance
+
+```python
+provenance = memory.get_memory_with_sources(memory_id)
+
+print(provenance.memory.content)
+for source in provenance.source_messages:
+    print(source.content)
+print(provenance.evidence_quote)
+```
+
+This lets you audit where a structured memory came from and inspect the raw messages that
+support it.
 
 ## Session State
 

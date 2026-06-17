@@ -35,6 +35,7 @@ class MemoryAgent:
         context_block = self.memory.build_context(
             user_id=user_id,
             query=content,
+            session_id=session_id,
             scope_type="project" if session_state and session_state.active_project_id else None,
             scope_id=session_state.active_project_id if session_state else None,
         )

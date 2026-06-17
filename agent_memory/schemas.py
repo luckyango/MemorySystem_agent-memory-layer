@@ -122,6 +122,37 @@ class MemoryContext:
     query: str
     memories: list[RetrievalResult] = field(default_factory=list)
     recall_messages: list[RecallRetrievalResult] = field(default_factory=list)
+    session_state: SessionState | None = None
+    active_project: Project | None = None
+
+
+@dataclass(slots=True)
+class RetrievalConfig:
+    keyword_weight: float = 1.0
+    vector_weight: float = 1.0
+    importance_weight: float = 0.25
+    confidence_weight: float = 0.15
+    recency_weight: float = 0.1
+    include_user_scope: bool = True
+    include_project_scope: bool = True
+    categories: list[MemoryCategory] | None = None
+
+
+@dataclass(slots=True)
+class ContextBudget:
+    max_context_chars: int = 6000
+    session_chars: int = 800
+    memory_chars: int = 3200
+    recall_chars: int = 1600
+
+
+@dataclass(slots=True)
+class MemoryProvenance:
+    memory: MemoryItem
+    source_messages: list[Message] = field(default_factory=list)
+    evidence_quote: str | None = None
+    write_action: str | None = None
+    write_reason: str | None = None
 
 
 @dataclass(slots=True)

@@ -9,13 +9,16 @@ from agent_memory.extractors import RuleBasedMemoryExtractor
 from agent_memory.resolvers import RuleBasedScopeResolver
 from agent_memory.retrievers import ChromaRetriever, KeywordRetriever
 from agent_memory.schemas import (
+    ContextBudget,
     MemoryCategory,
     MemoryCandidate,
     MemoryContext,
     MemoryItem,
+    MemoryProvenance,
     Message,
     MessageRole,
     Project,
+    RetrievalConfig,
     ScopeResolution,
     ScopeType,
     SessionState,
@@ -40,6 +43,8 @@ class MemoryLayer:
         scope_resolver: Any | None = None,
         conflict_resolver: Any | None = None,
         vector_store: Any | None = None,
+        retrieval_config: RetrievalConfig | None = None,
+        context_budget: ContextBudget | None = None,
     ):
         self.db_path = Path(db_path)
         self.recall_store = SQLiteRecallStore(self.db_path)
@@ -47,6 +52,7 @@ class MemoryLayer:
         self.project_store = SQLiteProjectStore(self.db_path)
         self.memory_store = SQLiteMemoryStore(self.db_path)
         self.vector_store = vector_store
+        self.retrieval_config = retrieval_config or RetrievalConfig()
         self.scope_resolver = scope_resolver or RuleBasedScopeResolver(self.project_store)
         self.extractor = extractor or RuleBasedMemoryExtractor()
         self.conflict_resolver = conflict_resolver or RuleBasedConflictResolver()
@@ -55,11 +61,12 @@ class MemoryLayer:
                 memory_store=self.memory_store,
                 recall_store=self.recall_store,
                 vector_store=self.vector_store,
+                config=self.retrieval_config,
             )
             if self.vector_store is not None
-            else KeywordRetriever(self.memory_store, self.recall_store)
+            else KeywordRetriever(self.memory_store, self.recall_store, config=self.retrieval_config)
         )
-        self.context_builder = ContextBuilder()
+        self.context_builder = ContextBuilder(budget=context_budget)
 
     @classmethod
     def with_openai(
@@ -70,6 +77,8 @@ class MemoryLayer:
         chat_model: str = "gpt-4.1-mini",
         chroma_path: str | Path | None = None,
         collection_name: str = "agent_memories",
+        retrieval_config: RetrievalConfig | None = None,
+        context_budget: ContextBudget | None = None,
     ) -> "MemoryLayer":
         from agent_memory.conflicts import LLMConflictResolver, RuleBasedConflictResolver
         from agent_memory.extractors import LLMMemoryExtractor, RuleBasedMemoryExtractor
@@ -103,6 +112,8 @@ class MemoryLayer:
             scope_resolver=scope_resolver,
             conflict_resolver=conflict_resolver,
             vector_store=vector_store,
+            retrieval_config=retrieval_config,
+            context_budget=context_budget,
         )
 
     def record_message(
@@ -385,32 +396,109 @@ class MemoryLayer:
             limit=limit,
         )
 
+    def get_memory_with_sources(self, memory_id: str) -> MemoryProvenance | None:
+        memory = self.memory_store.get_memory(memory_id)
+        if memory is None:
+            return None
+        source_messages = [
+            message
+            for message_id in memory.source_message_ids
+            if (message := self.recall_store.get_message(message_id)) is not None
+        ]
+        return MemoryProvenance(
+            memory=memory,
+            source_messages=source_messages,
+            evidence_quote=memory.metadata.get("evidence_quote"),
+            write_action=memory.metadata.get("write_action"),
+            write_reason=memory.metadata.get("write_reason"),
+        )
+
     def retrieve_context(
         self,
         *,
         user_id: str,
         query: str,
+        session_id: str | None = None,
         scope_type: str | None = None,
         scope_id: str | None = None,
+        categories: list[MemoryCategory] | None = None,
         memory_limit: int = 5,
         recall_limit: int = 3,
     ) -> MemoryContext:
-        memories = self.retriever.retrieve_memories(
-            user_id=user_id,
-            query=query,
-            scope_type=scope_type,
-            scope_id=scope_id,
-            limit=memory_limit,
+        session_state = (
+            self.session_store.get_session(user_id=user_id, session_id=session_id)
+            if session_id is not None
+            else None
         )
+        active_scope_type = scope_type
+        active_scope_id = scope_id
+        if active_scope_type is None and session_state and session_state.active_project_id:
+            active_scope_type = "project"
+            active_scope_id = session_state.active_project_id
+
+        memories = []
+        if active_scope_type == "project" and active_scope_id and self.retrieval_config.include_project_scope:
+            memories.extend(
+                self.retriever.retrieve_memories(
+                    user_id=user_id,
+                    query=query,
+                    scope_type="project",
+                    scope_id=active_scope_id,
+                    categories=categories,
+                    limit=memory_limit,
+                )
+            )
+        elif active_scope_type is not None:
+            memories.extend(
+                self.retriever.retrieve_memories(
+                    user_id=user_id,
+                    query=query,
+                    scope_type=active_scope_type,
+                    scope_id=active_scope_id,
+                    categories=categories,
+                    limit=memory_limit,
+                )
+            )
+
+        if self.retrieval_config.include_user_scope:
+            memories.extend(
+                self.retriever.retrieve_memories(
+                    user_id=user_id,
+                    query=query,
+                    scope_type="user",
+                    scope_id="global",
+                    categories=categories,
+                    limit=memory_limit,
+                )
+            )
+
+        if active_scope_type is None and not memories:
+            memories.extend(
+                self.retriever.retrieve_memories(
+                    user_id=user_id,
+                    query=query,
+                    categories=categories,
+                    limit=memory_limit,
+                )
+            )
+
+        memories = self._dedupe_results(memories)[:memory_limit]
         recall_messages = self.retriever.retrieve_recall(
             user_id=user_id,
             query=query,
             limit=recall_limit,
         )
+        active_project = (
+            self.project_store.get_project(active_scope_id)
+            if active_scope_type == "project" and active_scope_id
+            else None
+        )
         return MemoryContext(
             query=query,
             memories=memories,
             recall_messages=recall_messages,
+            session_state=session_state,
+            active_project=active_project,
         )
 
     def build_context(
@@ -418,17 +506,31 @@ class MemoryLayer:
         *,
         user_id: str,
         query: str,
+        session_id: str | None = None,
         scope_type: str | None = None,
         scope_id: str | None = None,
+        categories: list[MemoryCategory] | None = None,
         memory_limit: int = 5,
         recall_limit: int = 3,
+        budget: ContextBudget | None = None,
     ) -> str:
         context = self.retrieve_context(
             user_id=user_id,
             query=query,
+            session_id=session_id,
             scope_type=scope_type,
             scope_id=scope_id,
+            categories=categories,
             memory_limit=memory_limit,
             recall_limit=recall_limit,
         )
-        return self.context_builder.build(context)
+        return self.context_builder.build(context, budget=budget)
+
+    @staticmethod
+    def _dedupe_results(results):
+        deduped = {}
+        for result in results:
+            current = deduped.get(result.memory.id)
+            if current is None or result.score > current.score:
+                deduped[result.memory.id] = result
+        return sorted(deduped.values(), key=lambda item: item.score, reverse=True)
