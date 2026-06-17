@@ -24,7 +24,10 @@ The repository currently contains:
 
 - `mini_memGPT.py`: the legacy single-file prototype.
 - `agent_memory/`: the new package skeleton and shared data schemas.
+- `agent_memory/memory_layer.py`: high-level API for recall, projects, and structured memories.
 - `agent_memory/stores/recall_store.py`: SQLite storage for raw recall messages.
+- `agent_memory/stores/project_store.py`: SQLite project registry for multi-project users.
+- `agent_memory/stores/memory_store.py`: SQLite storage for structured long-term memories.
 
 ## Planned Milestones
 
@@ -58,4 +61,56 @@ Run the demo from the repository root:
 
 ```bash
 python -m examples.recall_store_demo
+```
+
+## Structured Memory Example
+
+```python
+from agent_memory.schemas import MemoryItem, Project
+from agent_memory.stores import SQLiteMemoryStore, SQLiteProjectStore
+
+project_store = SQLiteProjectStore("memory.sqlite3")
+memory_store = SQLiteMemoryStore("memory.sqlite3")
+
+project = project_store.add_project(
+    Project(user_id="user_1", name="Customer Churn", aliases=["churn project"])
+)
+
+memory_store.add_memory(
+    MemoryItem(
+        user_id="user_1",
+        scope_type="project",
+        scope_id=project.id,
+        category="project",
+        content="The customer churn project uses XGBoost.",
+    )
+)
+```
+
+## Memory Layer Example
+
+```python
+from agent_memory import MemoryLayer
+
+memory = MemoryLayer("memory.sqlite3")
+
+message = memory.record_message(
+    user_id="user_1",
+    session_id="session_1",
+    role="user",
+    content="I am working on a customer churn project with XGBoost.",
+)
+
+project = memory.create_project(
+    user_id="user_1",
+    name="Customer Churn",
+    aliases=["churn project"],
+)
+
+memory.remember_for_project(
+    user_id="user_1",
+    project_id=project.id,
+    content="The customer churn project uses XGBoost.",
+    source_message_ids=[message.id],
+)
 ```
