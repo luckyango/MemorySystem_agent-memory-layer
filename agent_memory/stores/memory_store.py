@@ -92,6 +92,8 @@ class SQLiteMemoryStore:
         content: str | None = None,
         confidence: float | None = None,
         importance: float | None = None,
+        source_message_ids: list[str] | None = None,
+        entities: list[str] | None = None,
         metadata: dict | None = None,
     ) -> MemoryItem | None:
         existing = self.get_memory(memory_id)
@@ -104,6 +106,10 @@ class SQLiteMemoryStore:
             existing.confidence = confidence
         if importance is not None:
             existing.importance = importance
+        if source_message_ids is not None:
+            existing.source_message_ids = source_message_ids
+        if entities is not None:
+            existing.entities = entities
         if metadata is not None:
             existing.metadata = metadata
         existing.updated_at = utc_now()
@@ -112,13 +118,16 @@ class SQLiteMemoryStore:
             conn.execute(
                 """
                 UPDATE memories
-                SET content = ?, confidence = ?, importance = ?, metadata = ?, updated_at = ?
+                SET content = ?, confidence = ?, importance = ?,
+                    source_message_ids = ?, entities = ?, metadata = ?, updated_at = ?
                 WHERE id = ?
                 """,
                 (
                     existing.content,
                     existing.confidence,
                     existing.importance,
+                    json.dumps(existing.source_message_ids, ensure_ascii=False),
+                    json.dumps(existing.entities, ensure_ascii=False),
                     json.dumps(existing.metadata, ensure_ascii=False),
                     datetime_to_iso(existing.updated_at),
                     memory_id,

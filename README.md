@@ -31,6 +31,7 @@ The repository currently contains:
 - `agent_memory/stores/memory_store.py`: SQLite storage for structured long-term memories.
 - `agent_memory/extractors/rule_based.py`: deterministic baseline extractor for obvious memories.
 - `agent_memory/extractors/llm.py`: LLM-backed extractor with JSON validation and fallback support.
+- `agent_memory/conflicts/rule_based.py`: deterministic baseline for duplicate and simple update decisions.
 
 ## Planned Milestones
 
@@ -154,3 +155,11 @@ The LLM extractor uses API-native structured outputs through Pydantic parsing an
 applies business validation. Every extracted memory candidate must include an
 `evidence_quote` copied from the source user message, and project memories must include
 at least one entity.
+
+## Conflict-Aware Writes
+
+`process_user_message()` now checks related memories before writing:
+
+- exact duplicate candidates are ignored
+- candidates with overlapping entities in the same scope/category update the existing memory
+- otherwise the candidate is inserted as a new memory

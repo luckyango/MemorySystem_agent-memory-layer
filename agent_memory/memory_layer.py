@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from agent_memory.conflicts import RuleBasedConflictResolver
 from agent_memory.extractors import RuleBasedMemoryExtractor
 from agent_memory.resolvers import RuleBasedScopeResolver
 from agent_memory.schemas import (
@@ -28,6 +29,7 @@ class MemoryLayer:
         self.memory_store = SQLiteMemoryStore(self.db_path)
         self.scope_resolver = RuleBasedScopeResolver(self.project_store)
         self.extractor = extractor or RuleBasedMemoryExtractor()
+        self.conflict_resolver = RuleBasedConflictResolver()
 
     def record_message(
         self,
@@ -108,23 +110,77 @@ class MemoryLayer:
             text=content,
             create_projects=create_projects,
         )
-        saved_memories = [
-            self.remember(
-                user_id=user_id,
-                content=candidate.content,
-                category=candidate.category,
-                scope_type=scope.scope_type,
-                scope_id=scope.scope_id,
-                confidence=candidate.confidence,
-                importance=candidate.importance,
-                source_message_ids=[message.id],
-                entities=candidate.entities,
-                metadata={**candidate.metadata, "scope_reason": scope.reason},
-            )
-            for candidate in candidates
-            if scope.kind != "unknown"
-        ]
+        saved_memories = []
+        if scope.kind != "unknown":
+            for candidate in candidates:
+                related = self.memory_store.list_memories(
+                    user_id=user_id,
+                    scope_type=scope.scope_type,
+                    scope_id=scope.scope_id,
+                    category=candidate.category,
+                    limit=20,
+                )
+                decision = self.conflict_resolver.decide(
+                    candidate=candidate,
+                    related_memories=related,
+                )
+                saved = self._apply_write_decision(
+                    user_id=user_id,
+                    scope=scope,
+                    message=message,
+                    decision=decision,
+                )
+                if saved is not None:
+                    saved_memories.append(saved)
         return message, saved_memories
+
+    def _apply_write_decision(
+        self,
+        *,
+        user_id: str,
+        scope: ScopeResolution,
+        message: Message,
+        decision,
+    ) -> MemoryItem | None:
+        candidate = decision.candidate
+        metadata = {
+            **candidate.metadata,
+            "scope_reason": scope.reason,
+            "write_action": decision.action,
+            "write_reason": decision.reason,
+        }
+        if decision.action == "ignore":
+            return None
+        if decision.action == "update" and decision.existing_memory is not None:
+            existing = decision.existing_memory
+            source_ids = [*existing.source_message_ids]
+            if message.id not in source_ids:
+                source_ids.append(message.id)
+            entities = sorted({*existing.entities, *candidate.entities}, key=str.casefold)
+            updated = self.memory_store.update_memory(
+                existing.id,
+                content=decision.merged_content or candidate.content,
+                confidence=max(existing.confidence, candidate.confidence),
+                importance=max(existing.importance, candidate.importance),
+                metadata={**existing.metadata, **metadata, "source_message_ids": source_ids, "entities": entities},
+            )
+            if updated is None:
+                return None
+            updated.source_message_ids = source_ids
+            updated.entities = entities
+            return updated
+        return self.remember(
+            user_id=user_id,
+            content=candidate.content,
+            category=candidate.category,
+            scope_type=scope.scope_type,
+            scope_id=scope.scope_id,
+            confidence=candidate.confidence,
+            importance=candidate.importance,
+            source_message_ids=[message.id],
+            entities=candidate.entities,
+            metadata=metadata,
+        )
 
     def remember(
         self,

@@ -9,6 +9,7 @@ from uuid import uuid4
 ScopeType = Literal["user", "project", "session"]
 MessageRole = Literal["user", "assistant", "system", "tool"]
 ScopeResolutionKind = Literal["existing_project", "new_project", "user", "session", "unknown"]
+MemoryWriteAction = Literal["insert", "ignore", "update"]
 MemoryCategory = Literal[
     "profile",
     "preference",
@@ -119,3 +120,12 @@ class ScopeResolution:
     project: Project | None = None
     suggested_project_name: str | None = None
     matched_text: str | None = None
+
+
+@dataclass(slots=True)
+class MemoryWriteDecision:
+    action: MemoryWriteAction
+    candidate: MemoryCandidate
+    reason: str
+    existing_memory: MemoryItem | None = None
+    merged_content: str | None = None
