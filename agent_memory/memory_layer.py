@@ -7,7 +7,7 @@ from agent_memory.conflicts import RuleBasedConflictResolver
 from agent_memory.context import ContextBuilder
 from agent_memory.extractors import RuleBasedMemoryExtractor
 from agent_memory.resolvers import RuleBasedScopeResolver
-from agent_memory.retrievers import KeywordRetriever
+from agent_memory.retrievers import ChromaRetriever, KeywordRetriever
 from agent_memory.schemas import (
     MemoryCategory,
     MemoryCandidate,
@@ -21,6 +21,7 @@ from agent_memory.schemas import (
     SessionState,
 )
 from agent_memory.stores import (
+    ChromaMemoryStore,
     SQLiteMemoryStore,
     SQLiteProjectStore,
     SQLiteRecallStore,
@@ -31,17 +32,56 @@ from agent_memory.stores import (
 class MemoryLayer:
     """High-level API that coordinates recall, project, and structured memory stores."""
 
-    def __init__(self, db_path: str | Path, *, extractor: Any | None = None):
+    def __init__(
+        self,
+        db_path: str | Path,
+        *,
+        extractor: Any | None = None,
+        vector_store: Any | None = None,
+    ):
         self.db_path = Path(db_path)
         self.recall_store = SQLiteRecallStore(self.db_path)
         self.session_store = SQLiteSessionStore(self.db_path)
         self.project_store = SQLiteProjectStore(self.db_path)
         self.memory_store = SQLiteMemoryStore(self.db_path)
+        self.vector_store = vector_store
         self.scope_resolver = RuleBasedScopeResolver(self.project_store)
         self.extractor = extractor or RuleBasedMemoryExtractor()
         self.conflict_resolver = RuleBasedConflictResolver()
-        self.retriever = KeywordRetriever(self.memory_store, self.recall_store)
+        self.retriever = (
+            ChromaRetriever(
+                memory_store=self.memory_store,
+                recall_store=self.recall_store,
+                vector_store=self.vector_store,
+            )
+            if self.vector_store is not None
+            else KeywordRetriever(self.memory_store, self.recall_store)
+        )
         self.context_builder = ContextBuilder()
+
+    @classmethod
+    def with_openai(
+        cls,
+        db_path: str | Path,
+        *,
+        client: Any | None = None,
+        chat_model: str = "gpt-4.1-mini",
+        chroma_path: str | Path | None = None,
+        collection_name: str = "agent_memories",
+    ) -> "MemoryLayer":
+        from agent_memory.extractors import LLMMemoryExtractor, RuleBasedMemoryExtractor
+
+        vector_path = chroma_path or Path(db_path).with_suffix("").parent / "chroma"
+        extractor = LLMMemoryExtractor(
+            client=client,
+            model=chat_model,
+            fallback=RuleBasedMemoryExtractor(),
+        )
+        vector_store = ChromaMemoryStore(
+            path=vector_path,
+            collection_name=collection_name,
+        )
+        return cls(db_path=db_path, extractor=extractor, vector_store=vector_store)
 
     def record_message(
         self,
@@ -210,6 +250,7 @@ class MemoryLayer:
                 return None
             updated.source_message_ids = source_ids
             updated.entities = entities
+            self._sync_vector_index(updated)
             return updated
         return self.remember(
             user_id=user_id,
@@ -238,7 +279,7 @@ class MemoryLayer:
         entities: list[str] | None = None,
         metadata: dict | None = None,
     ) -> MemoryItem:
-        return self.memory_store.add_memory(
+        memory = self.memory_store.add_memory(
             MemoryItem(
                 user_id=user_id,
                 scope_type=scope_type,
@@ -252,6 +293,12 @@ class MemoryLayer:
                 metadata=metadata or {},
             )
         )
+        self._sync_vector_index(memory)
+        return memory
+
+    def _sync_vector_index(self, memory: MemoryItem) -> None:
+        if self.vector_store is not None:
+            self.vector_store.upsert_memory(memory)
 
     def remember_for_project(
         self,

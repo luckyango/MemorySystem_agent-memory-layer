@@ -9,6 +9,9 @@ dependencies = [
     "pydantic>=2.0.0",
 ]
 
+[project.optional-dependencies]
+chroma = ["chromadb>=0.5.0"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 

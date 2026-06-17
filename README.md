@@ -35,7 +35,10 @@ The repository currently contains:
 - `agent_memory/extractors/llm.py`: LLM-backed extractor with JSON validation and fallback support.
 - `agent_memory/conflicts/rule_based.py`: deterministic baseline for duplicate and simple update decisions.
 - `agent_memory/retrievers/keyword.py`: keyword baseline retriever for structured and raw recall memory.
+- `agent_memory/stores/chroma_store.py`: ChromaDB vector index for structured memories.
+- `agent_memory/retrievers/chroma.py`: Chroma vector retriever with keyword fallback.
 - `agent_memory/context/builder.py`: formatter for prompt-ready memory context blocks.
+- `agent_memory/evaluation/runner.py`: deterministic fixtures for checking memory behavior.
 
 ## Planned Milestones
 
@@ -180,6 +183,28 @@ context_block = memory.build_context(
 The context block includes structured memories and matching raw recall messages, ready to
 inject into an agent prompt.
 
+## ChromaDB + LLM Mode
+
+Install the vector backend:
+
+```bash
+python -m pip install ".[chroma]"
+```
+
+Create a memory layer that uses OpenAI structured extraction and Chroma retrieval:
+
+```python
+from agent_memory import MemoryLayer
+
+memory = MemoryLayer.with_openai(
+    db_path="memory.sqlite3",
+    chroma_path=".chroma",
+)
+```
+
+Structured memories are still stored in SQLite as the source of truth; Chroma stores the
+semantic retrieval index.
+
 ## Session State
 
 ```python
@@ -212,4 +237,12 @@ Run the fake-client demo:
 
 ```bash
 python -m examples.agent_demo
+```
+
+## Evaluation Fixtures
+
+Run deterministic memory behavior checks:
+
+```bash
+python -m examples.eval_demo
 ```
