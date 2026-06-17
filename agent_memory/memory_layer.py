@@ -18,8 +18,14 @@ from agent_memory.schemas import (
     Project,
     ScopeResolution,
     ScopeType,
+    SessionState,
 )
-from agent_memory.stores import SQLiteMemoryStore, SQLiteProjectStore, SQLiteRecallStore
+from agent_memory.stores import (
+    SQLiteMemoryStore,
+    SQLiteProjectStore,
+    SQLiteRecallStore,
+    SQLiteSessionStore,
+)
 
 
 class MemoryLayer:
@@ -28,6 +34,7 @@ class MemoryLayer:
     def __init__(self, db_path: str | Path, *, extractor: Any | None = None):
         self.db_path = Path(db_path)
         self.recall_store = SQLiteRecallStore(self.db_path)
+        self.session_store = SQLiteSessionStore(self.db_path)
         self.project_store = SQLiteProjectStore(self.db_path)
         self.memory_store = SQLiteMemoryStore(self.db_path)
         self.scope_resolver = RuleBasedScopeResolver(self.project_store)
@@ -115,6 +122,12 @@ class MemoryLayer:
             text=content,
             create_projects=create_projects,
         )
+        if scope.scope_type == "project" and scope.scope_id:
+            self.session_store.update_session(
+                user_id=user_id,
+                session_id=session_id,
+                active_project_id=scope.scope_id,
+            )
         saved_memories = []
         if scope.kind != "unknown":
             for candidate in candidates:
@@ -138,6 +151,28 @@ class MemoryLayer:
                 if saved is not None:
                     saved_memories.append(saved)
         return message, saved_memories
+
+    def get_session_state(self, *, user_id: str, session_id: str) -> SessionState | None:
+        return self.session_store.get_session(user_id, session_id)
+
+    def update_session_state(
+        self,
+        *,
+        user_id: str,
+        session_id: str,
+        active_project_id: str | None = None,
+        current_task: str | None = None,
+        temporary_constraints: list[str] | None = None,
+        metadata: dict | None = None,
+    ) -> SessionState:
+        return self.session_store.update_session(
+            user_id=user_id,
+            session_id=session_id,
+            active_project_id=active_project_id,
+            current_task=current_task,
+            temporary_constraints=temporary_constraints,
+            metadata=metadata,
+        )
 
     def _apply_write_decision(
         self,

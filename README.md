@@ -27,6 +27,7 @@ The repository currently contains:
 - `agent_memory/memory_layer.py`: high-level API for recall, projects, and structured memories.
 - `agent_memory/resolvers/scope_resolver.py`: rule-based scope resolver for project/user/session routing.
 - `agent_memory/stores/recall_store.py`: SQLite storage for raw recall messages.
+- `agent_memory/stores/session_store.py`: SQLite storage for short-term session state.
 - `agent_memory/stores/project_store.py`: SQLite project registry for multi-project users.
 - `agent_memory/stores/memory_store.py`: SQLite storage for structured long-term memories.
 - `agent_memory/extractors/rule_based.py`: deterministic baseline extractor for obvious memories.
@@ -177,3 +178,16 @@ context_block = memory.build_context(
 
 The context block includes structured memories and matching raw recall messages, ready to
 inject into an agent prompt.
+
+## Session State
+
+```python
+memory.update_session_state(
+    user_id="user_1",
+    session_id="session_1",
+    current_task="Write memory evals",
+    temporary_constraints=["no network"],
+)
+
+state = memory.get_session_state(user_id="user_1", session_id="session_1")
+```
