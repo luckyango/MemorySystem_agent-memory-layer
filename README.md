@@ -29,6 +29,8 @@ The repository currently contains:
 - `agent_memory/stores/recall_store.py`: SQLite storage for raw recall messages.
 - `agent_memory/stores/project_store.py`: SQLite project registry for multi-project users.
 - `agent_memory/stores/memory_store.py`: SQLite storage for structured long-term memories.
+- `agent_memory/extractors/rule_based.py`: deterministic baseline extractor for obvious memories.
+- `agent_memory/extractors/llm.py`: LLM-backed extractor with JSON validation and fallback support.
 
 ## Planned Milestones
 
@@ -127,3 +129,28 @@ resolution = memory.resolve_scope(
 if resolution.kind == "existing_project":
     print(resolution.project.name)
 ```
+
+## Processing A User Message
+
+```python
+message, saved_memories = memory.process_user_message(
+    user_id="user_1",
+    session_id="session_1",
+    content="I am working on a customer churn project using XGBoost.",
+)
+```
+
+## LLM Memory Extraction
+
+```python
+from agent_memory import MemoryLayer
+from agent_memory.extractors import LLMMemoryExtractor, RuleBasedMemoryExtractor
+
+extractor = LLMMemoryExtractor(fallback=RuleBasedMemoryExtractor())
+memory = MemoryLayer("memory.sqlite3", extractor=extractor)
+```
+
+The LLM extractor uses API-native structured outputs through Pydantic parsing and then
+applies business validation. Every extracted memory candidate must include an
+`evidence_quote` copied from the source user message, and project memories must include
+at least one entity.

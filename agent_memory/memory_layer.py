@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
+from agent_memory.extractors import RuleBasedMemoryExtractor
 from agent_memory.resolvers import RuleBasedScopeResolver
 from agent_memory.schemas import (
     MemoryCategory,
+    MemoryCandidate,
     MemoryItem,
     Message,
     MessageRole,
@@ -18,12 +21,13 @@ from agent_memory.stores import SQLiteMemoryStore, SQLiteProjectStore, SQLiteRec
 class MemoryLayer:
     """High-level API that coordinates recall, project, and structured memory stores."""
 
-    def __init__(self, db_path: str | Path):
+    def __init__(self, db_path: str | Path, *, extractor: Any | None = None):
         self.db_path = Path(db_path)
         self.recall_store = SQLiteRecallStore(self.db_path)
         self.project_store = SQLiteProjectStore(self.db_path)
         self.memory_store = SQLiteMemoryStore(self.db_path)
         self.scope_resolver = RuleBasedScopeResolver(self.project_store)
+        self.extractor = extractor or RuleBasedMemoryExtractor()
 
     def record_message(
         self,
@@ -66,6 +70,61 @@ class MemoryLayer:
 
     def resolve_or_create_project(self, *, user_id: str, text: str) -> ScopeResolution:
         return self.scope_resolver.resolve_or_create_project(user_id=user_id, text=text)
+
+    def extract_memory_candidates(
+        self,
+        *,
+        user_id: str,
+        text: str,
+        create_projects: bool = False,
+    ) -> tuple[ScopeResolution, list[MemoryCandidate]]:
+        if create_projects:
+            scope = self.resolve_or_create_project(user_id=user_id, text=text)
+        else:
+            scope = self.resolve_scope(user_id=user_id, text=text)
+        related_memories = self.search_memories(user_id=user_id, query=text, limit=8)
+        return scope, self.extractor.extract(
+            text=text,
+            scope=scope,
+            related_memories=related_memories,
+        )
+
+    def process_user_message(
+        self,
+        *,
+        user_id: str,
+        session_id: str,
+        content: str,
+        create_projects: bool = True,
+    ) -> tuple[Message, list[MemoryItem]]:
+        message = self.record_message(
+            user_id=user_id,
+            session_id=session_id,
+            role="user",
+            content=content,
+        )
+        scope, candidates = self.extract_memory_candidates(
+            user_id=user_id,
+            text=content,
+            create_projects=create_projects,
+        )
+        saved_memories = [
+            self.remember(
+                user_id=user_id,
+                content=candidate.content,
+                category=candidate.category,
+                scope_type=scope.scope_type,
+                scope_id=scope.scope_id,
+                confidence=candidate.confidence,
+                importance=candidate.importance,
+                source_message_ids=[message.id],
+                entities=candidate.entities,
+                metadata={**candidate.metadata, "scope_reason": scope.reason},
+            )
+            for candidate in candidates
+            if scope.kind != "unknown"
+        ]
+        return message, saved_memories
 
     def remember(
         self,

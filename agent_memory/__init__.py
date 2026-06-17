@@ -3,6 +3,7 @@
 from agent_memory.memory_layer import MemoryLayer
 from agent_memory.schemas import (
     MemoryItem,
+    MemoryCandidate,
     Message,
     Project,
     RetrievalResult,
@@ -13,6 +14,7 @@ from agent_memory.schemas import (
 __all__ = [
     "MemoryLayer",
     "MemoryItem",
+    "MemoryCandidate",
     "Message",
     "Project",
     "RetrievalResult",

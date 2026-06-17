@@ -82,6 +82,16 @@ class MemoryItem:
 
 
 @dataclass(slots=True)
+class MemoryCandidate:
+    category: MemoryCategory
+    content: str
+    confidence: float = 0.8
+    importance: float = 0.5
+    entities: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
 class SessionState:
     user_id: str
     session_id: str
