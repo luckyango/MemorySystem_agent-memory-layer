@@ -32,6 +32,8 @@ The repository currently contains:
 - `agent_memory/extractors/rule_based.py`: deterministic baseline extractor for obvious memories.
 - `agent_memory/extractors/llm.py`: LLM-backed extractor with JSON validation and fallback support.
 - `agent_memory/conflicts/rule_based.py`: deterministic baseline for duplicate and simple update decisions.
+- `agent_memory/retrievers/keyword.py`: keyword baseline retriever for structured and raw recall memory.
+- `agent_memory/context/builder.py`: formatter for prompt-ready memory context blocks.
 
 ## Planned Milestones
 
@@ -163,3 +165,15 @@ at least one entity.
 - exact duplicate candidates are ignored
 - candidates with overlapping entities in the same scope/category update the existing memory
 - otherwise the candidate is inserted as a new memory
+
+## Retrieval Context
+
+```python
+context_block = memory.build_context(
+    user_id="user_1",
+    query="Which project uses XGBoost?",
+)
+```
+
+The context block includes structured memories and matching raw recall messages, ready to
+inject into an agent prompt.

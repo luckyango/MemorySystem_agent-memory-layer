@@ -4,11 +4,14 @@ from pathlib import Path
 from typing import Any
 
 from agent_memory.conflicts import RuleBasedConflictResolver
+from agent_memory.context import ContextBuilder
 from agent_memory.extractors import RuleBasedMemoryExtractor
 from agent_memory.resolvers import RuleBasedScopeResolver
+from agent_memory.retrievers import KeywordRetriever
 from agent_memory.schemas import (
     MemoryCategory,
     MemoryCandidate,
+    MemoryContext,
     MemoryItem,
     Message,
     MessageRole,
@@ -30,6 +33,8 @@ class MemoryLayer:
         self.scope_resolver = RuleBasedScopeResolver(self.project_store)
         self.extractor = extractor or RuleBasedMemoryExtractor()
         self.conflict_resolver = RuleBasedConflictResolver()
+        self.retriever = KeywordRetriever(self.memory_store, self.recall_store)
+        self.context_builder = ContextBuilder()
 
     def record_message(
         self,
@@ -162,7 +167,9 @@ class MemoryLayer:
                 content=decision.merged_content or candidate.content,
                 confidence=max(existing.confidence, candidate.confidence),
                 importance=max(existing.importance, candidate.importance),
-                metadata={**existing.metadata, **metadata, "source_message_ids": source_ids, "entities": entities},
+                source_message_ids=source_ids,
+                entities=entities,
+                metadata={**existing.metadata, **metadata},
             )
             if updated is None:
                 return None
@@ -273,3 +280,51 @@ class MemoryLayer:
             category=category,
             limit=limit,
         )
+
+    def retrieve_context(
+        self,
+        *,
+        user_id: str,
+        query: str,
+        scope_type: str | None = None,
+        scope_id: str | None = None,
+        memory_limit: int = 5,
+        recall_limit: int = 3,
+    ) -> MemoryContext:
+        memories = self.retriever.retrieve_memories(
+            user_id=user_id,
+            query=query,
+            scope_type=scope_type,
+            scope_id=scope_id,
+            limit=memory_limit,
+        )
+        recall_messages = self.retriever.retrieve_recall(
+            user_id=user_id,
+            query=query,
+            limit=recall_limit,
+        )
+        return MemoryContext(
+            query=query,
+            memories=memories,
+            recall_messages=recall_messages,
+        )
+
+    def build_context(
+        self,
+        *,
+        user_id: str,
+        query: str,
+        scope_type: str | None = None,
+        scope_id: str | None = None,
+        memory_limit: int = 5,
+        recall_limit: int = 3,
+    ) -> str:
+        context = self.retrieve_context(
+            user_id=user_id,
+            query=query,
+            scope_type=scope_type,
+            scope_id=scope_id,
+            memory_limit=memory_limit,
+            recall_limit=recall_limit,
+        )
+        return self.context_builder.build(context)

@@ -2,10 +2,12 @@
 
 from agent_memory.memory_layer import MemoryLayer
 from agent_memory.schemas import (
-    MemoryItem,
     MemoryCandidate,
+    MemoryContext,
+    MemoryItem,
     Message,
     Project,
+    RecallRetrievalResult,
     RetrievalResult,
     ScopeResolution,
     SessionState,
@@ -13,10 +15,12 @@ from agent_memory.schemas import (
 
 __all__ = [
     "MemoryLayer",
-    "MemoryItem",
     "MemoryCandidate",
+    "MemoryContext",
+    "MemoryItem",
     "Message",
     "Project",
+    "RecallRetrievalResult",
     "RetrievalResult",
     "ScopeResolution",
     "SessionState",

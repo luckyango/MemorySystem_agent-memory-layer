@@ -111,6 +111,20 @@ class RetrievalResult:
 
 
 @dataclass(slots=True)
+class RecallRetrievalResult:
+    message: Message
+    score: float
+    reason: str = ""
+
+
+@dataclass(slots=True)
+class MemoryContext:
+    query: str
+    memories: list[RetrievalResult] = field(default_factory=list)
+    recall_messages: list[RecallRetrievalResult] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class ScopeResolution:
     kind: ScopeResolutionKind
     scope_type: ScopeType
