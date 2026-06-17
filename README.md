@@ -24,6 +24,7 @@ The repository currently contains:
 
 - `mini_memGPT.py`: the legacy single-file prototype.
 - `agent_memory/`: the new package skeleton and shared data schemas.
+- `agent_memory/agent.py`: minimal chat agent loop that writes and reads memory.
 - `agent_memory/memory_layer.py`: high-level API for recall, projects, and structured memories.
 - `agent_memory/resolvers/scope_resolver.py`: rule-based scope resolver for project/user/session routing.
 - `agent_memory/stores/recall_store.py`: SQLite storage for raw recall messages.
@@ -190,4 +191,25 @@ memory.update_session_state(
 )
 
 state = memory.get_session_state(user_id="user_1", session_id="session_1")
+```
+
+## Minimal Agent Loop
+
+```python
+from agent_memory import MemoryAgent, MemoryLayer
+
+memory = MemoryLayer("memory.sqlite3")
+agent = MemoryAgent(memory=memory, client=openai_client)
+
+reply = agent.chat(
+    user_id="user_1",
+    session_id="session_1",
+    content="Which model did I say the churn project uses?",
+)
+```
+
+Run the fake-client demo:
+
+```bash
+python -m examples.agent_demo
 ```
