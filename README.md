@@ -24,6 +24,7 @@ The repository currently contains:
 
 - `mini_memGPT.py`: the legacy single-file prototype.
 - `agent_memory/`: the new package skeleton and shared data schemas.
+- `agent_memory/stores/recall_store.py`: SQLite storage for raw recall messages.
 
 ## Planned Milestones
 
@@ -33,3 +34,28 @@ The repository currently contains:
 4. Add memory extraction and conflict-aware update decisions.
 5. Add retrieval and context building.
 6. Add optional vector/Mem0 backends and evaluation demos.
+
+## Recall Store Example
+
+```python
+from agent_memory.schemas import Message
+from agent_memory.stores import SQLiteRecallStore
+
+store = SQLiteRecallStore("memory.sqlite3")
+store.add_message(
+    Message(
+        user_id="user_1",
+        session_id="session_1",
+        role="user",
+        content="I am working on a customer churn project with XGBoost.",
+    )
+)
+
+matches = store.search_messages("user_1", "XGBoost")
+```
+
+Run the demo from the repository root:
+
+```bash
+python -m examples.recall_store_demo
+```

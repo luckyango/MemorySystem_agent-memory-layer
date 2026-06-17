@@ -28,6 +28,17 @@ def new_id(prefix: str) -> str:
     return f"{prefix}_{uuid4().hex}"
 
 
+def datetime_to_iso(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat()
+
+
+def datetime_from_iso(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 @dataclass(slots=True)
 class Message:
     user_id: str
