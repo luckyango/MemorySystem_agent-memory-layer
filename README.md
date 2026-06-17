@@ -27,6 +27,7 @@ The repository currently contains:
 - `agent_memory/agent.py`: minimal chat agent loop that writes and reads memory.
 - `agent_memory/memory_layer.py`: high-level API for recall, projects, and structured memories.
 - `agent_memory/resolvers/scope_resolver.py`: rule-based scope resolver for project/user/session routing.
+- `agent_memory/resolvers/llm.py`: LLM-backed scope resolver with structured outputs and rule fallback.
 - `agent_memory/stores/recall_store.py`: SQLite storage for raw recall messages.
 - `agent_memory/stores/session_store.py`: SQLite storage for short-term session state.
 - `agent_memory/stores/project_store.py`: SQLite project registry for multi-project users.
@@ -34,6 +35,7 @@ The repository currently contains:
 - `agent_memory/extractors/rule_based.py`: deterministic baseline extractor for obvious memories.
 - `agent_memory/extractors/llm.py`: LLM-backed extractor with JSON validation and fallback support.
 - `agent_memory/conflicts/rule_based.py`: deterministic baseline for duplicate and simple update decisions.
+- `agent_memory/conflicts/llm.py`: LLM-backed memory write decisions with structured outputs and rule fallback.
 - `agent_memory/retrievers/keyword.py`: keyword baseline retriever for structured and raw recall memory.
 - `agent_memory/stores/chroma_store.py`: ChromaDB vector index for structured memories.
 - `agent_memory/retrievers/chroma.py`: Chroma vector retriever with keyword fallback.
@@ -202,8 +204,9 @@ memory = MemoryLayer.with_openai(
 )
 ```
 
-Structured memories are still stored in SQLite as the source of truth; Chroma stores the
-semantic retrieval index.
+`with_openai()` enables LLM-backed scope resolution, LLM-backed memory extraction,
+LLM-backed conflict decisions, and Chroma retrieval. Structured memories are still stored
+in SQLite as the source of truth; Chroma stores the semantic retrieval index.
 
 ## Session State
 

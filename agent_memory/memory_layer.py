@@ -37,6 +37,8 @@ class MemoryLayer:
         db_path: str | Path,
         *,
         extractor: Any | None = None,
+        scope_resolver: Any | None = None,
+        conflict_resolver: Any | None = None,
         vector_store: Any | None = None,
     ):
         self.db_path = Path(db_path)
@@ -45,9 +47,9 @@ class MemoryLayer:
         self.project_store = SQLiteProjectStore(self.db_path)
         self.memory_store = SQLiteMemoryStore(self.db_path)
         self.vector_store = vector_store
-        self.scope_resolver = RuleBasedScopeResolver(self.project_store)
+        self.scope_resolver = scope_resolver or RuleBasedScopeResolver(self.project_store)
         self.extractor = extractor or RuleBasedMemoryExtractor()
-        self.conflict_resolver = RuleBasedConflictResolver()
+        self.conflict_resolver = conflict_resolver or RuleBasedConflictResolver()
         self.retriever = (
             ChromaRetriever(
                 memory_store=self.memory_store,
@@ -69,7 +71,9 @@ class MemoryLayer:
         chroma_path: str | Path | None = None,
         collection_name: str = "agent_memories",
     ) -> "MemoryLayer":
+        from agent_memory.conflicts import LLMConflictResolver, RuleBasedConflictResolver
         from agent_memory.extractors import LLMMemoryExtractor, RuleBasedMemoryExtractor
+        from agent_memory.resolvers import LLMScopeResolver, RuleBasedScopeResolver
 
         vector_path = chroma_path or Path(db_path).with_suffix("").parent / "chroma"
         extractor = LLMMemoryExtractor(
@@ -77,11 +81,29 @@ class MemoryLayer:
             model=chat_model,
             fallback=RuleBasedMemoryExtractor(),
         )
+        project_store = SQLiteProjectStore(db_path)
+        scope_resolver = LLMScopeResolver(
+            project_store=project_store,
+            client=client,
+            model=chat_model,
+            fallback=RuleBasedScopeResolver(project_store),
+        )
+        conflict_resolver = LLMConflictResolver(
+            client=client,
+            model=chat_model,
+            fallback=RuleBasedConflictResolver(),
+        )
         vector_store = ChromaMemoryStore(
             path=vector_path,
             collection_name=collection_name,
         )
-        return cls(db_path=db_path, extractor=extractor, vector_store=vector_store)
+        return cls(
+            db_path=db_path,
+            extractor=extractor,
+            scope_resolver=scope_resolver,
+            conflict_resolver=conflict_resolver,
+            vector_store=vector_store,
+        )
 
     def record_message(
         self,
