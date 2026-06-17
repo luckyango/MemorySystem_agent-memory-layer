@@ -8,6 +8,7 @@ from uuid import uuid4
 
 ScopeType = Literal["user", "project", "session"]
 MessageRole = Literal["user", "assistant", "system", "tool"]
+ScopeResolutionKind = Literal["existing_project", "new_project", "user", "session", "unknown"]
 MemoryCategory = Literal[
     "profile",
     "preference",
@@ -96,3 +97,15 @@ class RetrievalResult:
     memory: MemoryItem
     score: float
     reason: str = ""
+
+
+@dataclass(slots=True)
+class ScopeResolution:
+    kind: ScopeResolutionKind
+    scope_type: ScopeType
+    scope_id: str
+    confidence: float
+    reason: str
+    project: Project | None = None
+    suggested_project_name: str | None = None
+    matched_text: str | None = None

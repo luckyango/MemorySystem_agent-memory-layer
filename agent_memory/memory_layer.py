@@ -2,7 +2,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agent_memory.schemas import MemoryCategory, MemoryItem, Message, MessageRole, Project, ScopeType
+from agent_memory.resolvers import RuleBasedScopeResolver
+from agent_memory.schemas import (
+    MemoryCategory,
+    MemoryItem,
+    Message,
+    MessageRole,
+    Project,
+    ScopeResolution,
+    ScopeType,
+)
 from agent_memory.stores import SQLiteMemoryStore, SQLiteProjectStore, SQLiteRecallStore
 
 
@@ -14,6 +23,7 @@ class MemoryLayer:
         self.recall_store = SQLiteRecallStore(self.db_path)
         self.project_store = SQLiteProjectStore(self.db_path)
         self.memory_store = SQLiteMemoryStore(self.db_path)
+        self.scope_resolver = RuleBasedScopeResolver(self.project_store)
 
     def record_message(
         self,
@@ -50,6 +60,12 @@ class MemoryLayer:
                 description=description,
             )
         )
+
+    def resolve_scope(self, *, user_id: str, text: str) -> ScopeResolution:
+        return self.scope_resolver.resolve(user_id=user_id, text=text)
+
+    def resolve_or_create_project(self, *, user_id: str, text: str) -> ScopeResolution:
+        return self.scope_resolver.resolve_or_create_project(user_id=user_id, text=text)
 
     def remember(
         self,

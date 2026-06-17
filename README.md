@@ -25,6 +25,7 @@ The repository currently contains:
 - `mini_memGPT.py`: the legacy single-file prototype.
 - `agent_memory/`: the new package skeleton and shared data schemas.
 - `agent_memory/memory_layer.py`: high-level API for recall, projects, and structured memories.
+- `agent_memory/resolvers/scope_resolver.py`: rule-based scope resolver for project/user/session routing.
 - `agent_memory/stores/recall_store.py`: SQLite storage for raw recall messages.
 - `agent_memory/stores/project_store.py`: SQLite project registry for multi-project users.
 - `agent_memory/stores/memory_store.py`: SQLite storage for structured long-term memories.
@@ -113,4 +114,16 @@ memory.remember_for_project(
     content="The customer churn project uses XGBoost.",
     source_message_ids=[message.id],
 )
+```
+
+## Scope Resolution Example
+
+```python
+resolution = memory.resolve_scope(
+    user_id="user_1",
+    text="The churn project now uses LightGBM.",
+)
+
+if resolution.kind == "existing_project":
+    print(resolution.project.name)
 ```
