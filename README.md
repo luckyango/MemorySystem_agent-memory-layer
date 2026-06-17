@@ -282,3 +282,43 @@ Run deterministic memory behavior checks:
 ```bash
 python -m examples.eval_demo
 ```
+```mermaid
+flowchart TD
+    U["User Message"] --> A["MemoryAgent"]
+
+    A --> ML["MemoryLayer"]
+
+    ML --> RS["Recall Store<br/>Raw messages + tool events<br/>SQLite"]
+    ML --> SS["Session Store<br/>Active project, current task,<br/>temporary constraints<br/>SQLite"]
+
+    ML --> SR["Scope Resolver<br/>LLM structured output<br/>Rule fallback"]
+    SR --> PS["Project Store<br/>Project registry + aliases<br/>SQLite"]
+
+    ML --> EX["Memory Extractor<br/>LLM structured output<br/>Evidence quote validation<br/>Rule fallback"]
+
+    EX --> CR["Conflict Resolver<br/>Insert / update / ignore<br/>LLM structured output<br/>Rule fallback"]
+
+    CR --> MS["Structured Memory Store<br/>Profile, preference, project,<br/>goal, fact, constraint<br/>SQLite source of truth"]
+
+    MS --> CH["ChromaDB Vector Index<br/>Semantic retrieval index"]
+
+    A --> Q["Current Query"]
+    Q --> RT["Retriever<br/>Chroma vector search<br/>Keyword fallback<br/>Recency + importance rerank"]
+
+    RT --> CH
+    RT --> MS
+    RT --> RS
+
+    ML --> CB["Context Builder<br/>Session state injection<br/>Category filters<br/>Context budget"]
+
+    SS --> CB
+    PS --> CB
+    RT --> CB
+
+    CB --> P["Prompt Context<br/>Relevant memories<br/>Raw recall evidence<br/>Session state"]
+
+    P --> LLM["LLM Response"]
+    LLM --> A
+
+    A --> RS
+```
